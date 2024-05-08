@@ -1,0 +1,45 @@
+name: Schedule Council Review Status Update
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  start-timer:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out the code
+      uses: actions/checkout@v2
+
+    - name: Identify HIPs in Last Call
+      id: find-last-call
+      run: |
+        # Get HIP files that have status set to 'Last Call'
+        LAST_CALL_HIPS=$(grep -rl '^status: Last Call' hips/)
+        # Check if there's any HIP that has a 'last-call-date-time' in the future
+        echo "LAST_CALL_HIPS=$LAST_CALL_HIPS" >> $GITHUB_ENV
+
+  set-delayed-action:
+    needs: start-timer
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set Delayed Action
+      run: |
+        # Wait for 2 weeks (1209600 seconds)
+        sleep 1209600
+
+    - name: Update HIP Status to Council Review
+      if: env.LAST_CALL_HIPS != ""
+      run: |
+        for file in $LAST_CALL_HIPS; do
+          sed -i "s/^status: Last Call/status: Council Review/" $file
+        done
+
+    - name: Create PR for Council Review Status Update
+      if: env.LAST_CALL_HIPS != ""
+      run: |
+        git config --global user.name 'GitHub Action'
+        git config --global user.email 'action@github.com'
+        git add hips/
+        git commit -m "Change HIP status to Council Review"
+        git push origin

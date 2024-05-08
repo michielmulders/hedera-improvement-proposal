@@ -1,0 +1,48 @@
+name: Assign HIP Number
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  assign-hip-number:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out the code
+      uses: actions/checkout@v2
+
+    - name: Identify if New HIP
+      id: check-new
+      run: |
+        # Find the modified files in the PR
+        MODIFIED_FILES=$(git diff --name-only origin/main...$GITHUB_SHA)
+        HIP_FILES=$(echo "$MODIFIED_FILES" | grep '^hips/.*\.md')
+
+        # Check if the modified files have 'hip: <number>' already assigned
+        for file in $HIP_FILES; do
+          if grep -q '^hip: [0-9]' $file; then
+            echo "This PR modifies an existing HIP."
+            echo "::set-output name=new-hip::false"
+            exit 0
+          fi
+        done
+        echo "This PR creates a new HIP."
+        echo "::set-output name=new-hip::true"
+
+    - name: Assign HIP Number
+      if: steps.check-new.outputs.new-hip == 'true'
+      run: |
+        PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+        HIP_HEADER="hip: $PR_NUMBER"
+        # Update the relevant file header here
+        # Example using sed to modify the specific file
+        HIP_FILE=$(git diff --name-only origin/main...$GITHUB_SHA | grep '^hips/.*\.md')
+        sed -i "s/^hip:.*$/$HIP_HEADER/" $HIP_FILE
+
+    - name: Commit Changes
+      if: steps.check-new.outputs.new-hip == 'true'
+      run: |
+        git config --global user.name 'GitHub Action'
+        git config --global user.email 'action@github.com'
+        git add hips/
+        git commit -m "Assign HIP number to new proposal"
+        git push origin
